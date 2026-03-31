@@ -1,8 +1,18 @@
 services:
   vibesafe:
     build: .
-    ports:
-      - "3847:3847"
+    container_name: vibesafe
+    expose:
+      - "3847"
     environment:
       - PORT=3847
+      # Set your domain here:
+      - VIRTUAL_HOST=vibesafe.example.com
+      - LETSENCRYPT_HOST=vibesafe.example.com
     restart: unless-stopped
+    networks:
+      - nginx-proxy
+
+networks:
+  nginx-proxy:
+    external: true
