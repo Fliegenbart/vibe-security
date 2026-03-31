@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vibesafe — Is your vibe-coded project secure?</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface2: #1a1a28;
+      --border: #2a2a3a;
+      --text: #e4e4ef;
+      --text-dim: #8888a0;
+      --accent: #7c5cfc;
+      --accent-glow: #7c5cfc40;
+      --critical: #ff3b5c;
+      --critical-bg: #ff3b5c15;
+      --high: #ff6b35;
+      --high-bg: #ff6b3515;
+      --medium: #ffb834;
+      --medium-bg: #ffb83415;
+      --low: #5b9fff;
+      --low-bg: #5b9fff15;
+      --green: #34d399;
+      --green-bg: #34d39915;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 60px 60px;
+      opacity: 0.15;
+      pointer-events: none;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+    }
+
+    /* NAV */
+    nav {
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--accent); }
+    .nav-links {
+      display: flex;
+      gap: 24px;
+    }
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 80px 0 48px;
+    }
+    .badge {
+      display: inline-block;
+      background: var(--accent-glow);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      margin-bottom: 16px;
+    }
+    h1 .gradient {
+      background: linear-gradient(135deg, var(--accent), #ff6b35, var(--critical));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      font-size: 18px;
+      color: var(--text-dim);
+      max-width: 520px;
+      margin: 0 auto 48px;
+      line-height: 1.5;
+    }
+
+    /* SCANNER INPUT */
+    .scanner-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    .input-row {
+      display: flex;
+      gap: 12px;
+    }
+    .input-row input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 15px;
+      color: var(--text);
+      outline: none;
+      font-family: var(--mono);
+      transition: border-color 0.2s;
+    }
+    .input-row input::placeholder { color: var(--text-dim); }
+    .input-row input:focus { border-color: var(--accent); }
+
+    .scan-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 14px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .scan-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .scan-btn:active { transform: translateY(0); }
+    .scan-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .scan-btn.scanning {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    .hint {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+
+    /* LOADING */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 48px 0;
+    }
+    .loading.active { display: block; }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+    .loading-step {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 13px;
+      margin-top: 8px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { opacity: 0.5; } }
+
+    /* ERROR */
+    .error-box {
+      display: none;
+      background: var(--critical-bg);
+      border: 1px solid var(--critical);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--critical);
+    }
+    .error-box.active { display: block; }
+
+    /* RESULTS */
+    .results {
+      display: none;
+      margin-top: 24px;
+    }
+    .results.active { display: block; }
+
+    /* Summary bar */
+    .summary {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .summary-card {
+      flex: 1;
+      min-width: 100px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .summary-card .count {
+      font-size: 28px;
+      font-weight: 800;
+      font-family: var(--mono);
+    }
+    .summary-card .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .summary-card.critical .count { color: var(--critical); }
+    .summary-card.high .count { color: var(--high); }
+    .summary-card.medium .count { color: var(--medium); }
+    .summary-card.low .count { color: var(--low); }
+    .summary-card.clean {
+      border-color: var(--green);
+      background: var(--green-bg);
+    }
+    .summary-card.clean .count { color: var(--green); }
+
+    .framework-badge {
+      display: inline-block;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+
+    /* Finding card */
+    .finding {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      border-left: 3px solid var(--border);
+      transition: border-color 0.2s;
+    }
+    .finding:hover { border-color: var(--accent); }
+    .finding.critical { border-left-color: var(--critical); }
+    .finding.high { border-left-color: var(--high); }
+    .finding.medium { border-left-color: var(--medium); }
+    .finding.low { border-left-color: var(--low); }
+
+    .finding-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .severity-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .severity-tag.critical { background: var(--critical-bg); color: var(--critical); }
+    .severity-tag.high { background: var(--high-bg); color: var(--high); }
+    .severity-tag.medium { background: var(--medium-bg); color: var(--medium); }
+    .severity-tag.low { background: var(--low-bg); color: var(--low); }
+
+    .finding-title {
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .finding-location {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+    }
+
+    .finding-code {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--critical);
+      overflow-x: auto;
+      margin-bottom: 10px;
+    }
+
+    .finding-desc {
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .finding-fix {
+      background: var(--green-bg);
+      border: 1px solid #34d39930;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--green);
+    }
+    .finding-fix strong {
+      color: var(--green);
+    }
+    .fix-code {
+      font-family: var(--mono);
+      display: block;
+      margin-top: 6px;
+      color: var(--green);
+      opacity: 0.8;
+    }
+
+    /* Clean result */
+    .clean-result {
+      text-align: center;
+      padding: 48px 0;
+    }
+    .clean-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+    .clean-result h2 {
+      color: var(--green);
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .clean-result p {
+      color: var(--text-dim);
+    }
+
+    /* FEATURES */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding: 64px 0;
+    }
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .feature-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .feature h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .feature p {
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 0;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    /* Export button */
+    .export-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 20px;
+    }
+    .export-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .export-btn:active { transform: translateY(0); }
+    .export-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 640px) {
+      .input-row { flex-direction: column; }
+      .features { grid-template-columns: 1fr; }
+      .summary { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="container">
+      <div class="logo">vibe<span>safe</span></div>
+      <div class="nav-links">
+        <a href="https://github.com/vibesafe/vibesafe">GitHub</a>
+        <a href="#features">What we scan</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="container">
+      <div class="badge">Open Source Security Scanner</div>
+      <h1>Is your <span class="gradient">vibe-coded</span><br>project secure?</h1>
+      <p class="subtitle">
+        AI tools generate code fast. But they also generate vulnerabilities.
+        Paste a GitHub URL and find out in seconds.
+      </p>
+
+      <div class="scanner-box">
+        <div class="input-row">
+          <input
+            type="text"
+            id="url-input"
+            placeholder="https://github.com/user/repo"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <button class="scan-btn" id="scan-btn" onclick="startScan()">
+            Scan now
+          </button>
+        </div>
+        <p class="hint">Public GitHub repos only. We clone, scan, and delete. Nothing is stored.</p>
+
+        <div class="error-box" id="error-box"></div>
+      </div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p class="loading-text">Scanning repository...</p>
+        <p class="loading-step" id="loading-step">Cloning repository</p>
+      </div>
+
+      <div class="results" id="results"></div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="container">
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">&#x1f512;</div>
+          <h3>Auth Scanner</h3>
+          <p>Hardcoded secrets, weak JWTs, insecure session storage, placeholder auth checks.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x1f489;</div>
+          <h3>Injection Scanner</h3>
+          <p>SQL injection, XSS, command injection, SSRF, and path traversal vulnerabilities.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x2699;&#xfe0f;</div>
+          <h3>Config Scanner</h3>
+          <p>Exposed .env files, debug mode, permissive CORS, default credentials, open ports.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      vibesafe v1.0.0 &mdash; Open source. Runs locally. No data stored.
+    </div>
+  </footer>
+
+<script>
+const urlInput = document.getElementById('url-input');
+const scanBtn = document.getElementById('scan-btn');
+const loading = document.getElementById('loading');
+const loadingStep = document.getElementById('loading-step');
+const errorBox = document.getElementById('error-box');
+const resultsDiv = document.getElementById('results');
+
+const steps = [
+  'Cloning repository',
+  'Analyzing source files',
+  'Running auth scanner',
+  'Running injection scanner',
+  'Running config scanner',
+  'Generating report'
+];
+
+urlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') startScan();
+});
+
+async function startScan() {
+  const url = urlInput.value.trim();
+  if (!url) {
+    showError('Please enter a GitHub repository URL.');
+    return;
+  }
+
+  // Reset
+  errorBox.classList.remove('active');
+  resultsDiv.classList.remove('active');
+  resultsDiv.innerHTML = '';
+  loading.classList.add('active');
+  scanBtn.disabled = true;
+  scanBtn.textContent = 'Scanning...';
+  scanBtn.classList.add('scanning');
+
+  // Animate loading steps
+  let stepIdx = 0;
+  const stepInterval = setInterval(() => {
+    stepIdx = (stepIdx + 1) % steps.length;
+    loadingStep.textContent = steps[stepIdx];
+  }, 2000);
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+
+    const data = await resp.json();
+
+    clearInterval(stepInterval);
+    loading.classList.remove('active');
+
+    if (!resp.ok) {
+      showError(data.error || 'Scan failed.');
+      return;
+    }
+
+    renderResults(data);
+
+  } catch (err) {
+    clearInterval(stepInterval);
+    loading.classList.remove('active');
+    showError('Connection failed. Make sure the server is running.');
+  } finally {
+    scanBtn.disabled = false;
+    scanBtn.textContent = 'Scan now';
+    scanBtn.classList.remove('scanning');
+  }
+}
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.classList.add('active');
+}
+
+let lastReport = null;
+let lastUrl = '';
+
+function renderResults(report) {
+  lastReport = report;
+  lastUrl = urlInput.value.trim();
+  const { framework, counts, findings: scanResults, totalFindings } = report;
+
+  let html = '';
+
+  // Export bar with framework badge
+  html += `<div class="export-bar">`;
+  html += `<span class="framework-badge">Detected: ${framework.name} (${framework.type})</span>`;
+  if (totalFindings > 0) {
+    html += `<button class="export-btn" onclick="exportPDF()">&#x1f4c4; Export PDF</button>`;
+  }
+  html += `</div>`;
+
+  // Summary
+  if (totalFindings === 0) {
+    html += `
+      <div class="clean-result">
+        <div class="clean-icon">&#x2705;</div>
+        <h2>No security issues found!</h2>
+        <p>Your project passed all ${report.totalFiles} file scans. Nice vibes!</p>
+      </div>`;
+  } else {
+    html += '<div class="summary">';
+    if (counts.critical > 0) html += summaryCard(counts.critical, 'Critical', 'critical');
+    if (counts.high > 0) html += summaryCard(counts.high, 'High', 'high');
+    if (counts.medium > 0) html += summaryCard(counts.medium, 'Medium', 'medium');
+    if (counts.low > 0) html += summaryCard(counts.low, 'Low', 'low');
+    html += '</div>';
+
+    // Findings sorted by severity
+    const allFindings = scanResults.flatMap(r => r.findings);
+    const order = { critical: 0, high: 1, medium: 2, low: 3 };
+    allFindings.sort((a, b) => order[a.severity] - order[b.severity]);
+
+    for (const f of allFindings) {
+      html += renderFinding(f);
+    }
+  }
+
+  resultsDiv.innerHTML = html;
+  resultsDiv.classList.add('active');
+  resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function summaryCard(count, label, cls) {
+  return `
+    <div class="summary-card ${cls}">
+      <div class="count">${count}</div>
+      <div class="label">${label}</div>
+    </div>`;
+}
+
+function renderFinding(f) {
+  let html = `<div class="finding ${f.severity}">`;
+  html += `<div class="finding-header">`;
+  html += `<span class="severity-tag ${f.severity}">${f.severity}</span>`;
+  html += `<span class="finding-title">${esc(f.title)}</span>`;
+  html += `</div>`;
+  html += `<div class="finding-location">${esc(f.file)}:${f.line}</div>`;
+
+  if (f.code) {
+    html += `<div class="finding-code">${esc(f.code)}</div>`;
+  }
+
+  html += `<div class="finding-desc">${esc(f.description)}</div>`;
+
+  html += `<div class="finding-fix">`;
+  html += `<strong>Fix:</strong> ${esc(f.fix)}`;
+  if (f.fixedCode) {
+    html += `<span class="fix-code">${esc(f.fixedCode)}</span>`;
+  }
+  if (f.command) {
+    html += `<span class="fix-code">$ ${esc(f.command)}</span>`;
+  }
+  html += `</div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function exportPDF() {
+  if (!lastReport) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pw = 170; // printable width
+  const lm = 20;  // left margin
+  let y = 20;
+
+  const colors = {
+    critical: [255, 59, 92],
+    high: [255, 107, 53],
+    medium: [255, 184, 52],
+    low: [91, 159, 255]
+  };
+
+  function checkPage(need) {
+    if (y + need > 275) { doc.addPage(); y = 20; }
+  }
+
+  // Header
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(40, 40, 50);
+  doc.text('vibesafe Security Report', lm, y);
+  y += 10;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 140);
+  doc.text(`Repository: ${lastUrl}`, lm, y);
+  y += 5;
+  doc.text(`Scanned: ${new Date().toLocaleString()}  |  Framework: ${lastReport.framework.name} (${lastReport.framework.type})`, lm, y);
+  y += 5;
+  doc.text(`Files scanned: ${lastReport.totalFiles}`, lm, y);
+  y += 10;
+
+  // Summary bar
+  const c = lastReport.counts;
+  const cats = [
+    { label: 'CRITICAL', count: c.critical, color: colors.critical },
+    { label: 'HIGH', count: c.high, color: colors.high },
+    { label: 'MEDIUM', count: c.medium, color: colors.medium },
+    { label: 'LOW', count: c.low, color: colors.low }
+  ].filter(x => x.count > 0);
+
+  const boxW = pw / cats.length;
+  cats.forEach((cat, i) => {
+    const bx = lm + i * boxW;
+    doc.setFillColor(cat.color[0], cat.color[1], cat.color[2]);
+    doc.roundedRect(bx + 1, y, boxW - 2, 16, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(String(cat.count), bx + boxW / 2, y + 8, { align: 'center' });
+    doc.setFontSize(7);
+    doc.text(cat.label, bx + boxW / 2, y + 13, { align: 'center' });
+  });
+  y += 24;
+
+  // Line
+  doc.setDrawColor(200, 200, 210);
+  doc.line(lm, y, lm + pw, y);
+  y += 8;
+
+  // Findings
+  const allFindings = lastReport.findings.flatMap(r => r.findings);
+  const order = { critical: 0, high: 1, medium: 2, low: 3 };
+  allFindings.sort((a, b) => order[a.severity] - order[b.severity]);
+
+  allFindings.forEach((f, idx) => {
+    checkPage(45);
+
+    // Severity tag
+    const col = colors[f.severity];
+    doc.setFillColor(col[0], col[1], col[2]);
+    const tagW = doc.getTextWidth(f.severity.toUpperCase()) + 6;
+    doc.roundedRect(lm, y - 3.5, tagW + 4, 5.5, 1, 1, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text(f.severity.toUpperCase(), lm + 3, y);
+
+    // Title
+    doc.setTextColor(40, 40, 50);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(f.title, lm + tagW + 8, y);
+    y += 5;
+
+    // Location
+    doc.setTextColor(120, 120, 140);
+    doc.setFontSize(8);
+    doc.setFont('courier', 'normal');
+    doc.text(`${f.file}:${f.line}`, lm, y);
+    y += 5;
+
+    // Code
+    if (f.code) {
+      checkPage(12);
+      doc.setFillColor(245, 245, 248);
+      const codeLines = doc.splitTextToSize(f.code, pw - 8);
+      const codeH = codeLines.length * 4 + 4;
+      doc.roundedRect(lm, y - 2, pw, codeH, 1, 1, 'F');
+      doc.setTextColor(200, 50, 70);
+      doc.setFontSize(7);
+      doc.setFont('courier', 'normal');
+      codeLines.forEach((line, li) => {
+        doc.text(line, lm + 4, y + 2 + li * 4);
+      });
+      y += codeH + 2;
+    }
+
+    // Description
+    checkPage(15);
+    doc.setTextColor(80, 80, 100);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const descLines = doc.splitTextToSize(f.description, pw);
+    descLines.forEach(line => {
+      checkPage(5);
+      doc.text(line, lm, y);
+      y += 4;
+    });
+    y += 2;
+
+    // Fix
+    checkPage(12);
+    doc.setFillColor(230, 250, 240);
+    const fixText = `Fix: ${f.fix}`;
+    const fixLines = doc.splitTextToSize(fixText, pw - 8);
+    let fixH = fixLines.length * 4 + 4;
+    if (f.fixedCode) fixH += 5;
+    if (f.command) fixH += 5;
+    doc.roundedRect(lm, y - 2, pw, fixH, 1, 1, 'F');
+    doc.setTextColor(20, 140, 90);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    fixLines.forEach((line, li) => {
+      doc.text(line, lm + 4, y + 2 + li * 4);
+    });
+    y += fixLines.length * 4 + 2;
+    if (f.fixedCode) {
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(7);
+      doc.text(f.fixedCode, lm + 4, y + 2);
+      y += 5;
+    }
+    if (f.command) {
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(7);
+      doc.text('$ ' + f.command, lm + 4, y + 2);
+      y += 5;
+    }
+    y += 6;
+
+    // Separator
+    if (idx < allFindings.length - 1) {
+      checkPage(4);
+      doc.setDrawColor(220, 220, 230);
+      doc.line(lm, y - 2, lm + pw, y - 2);
+      y += 4;
+    }
+  });
+
+  // Footer on last page
+  checkPage(15);
+  y += 5;
+  doc.setDrawColor(200, 200, 210);
+  doc.line(lm, y, lm + pw, y);
+  y += 6;
+  doc.setTextColor(150, 150, 170);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Generated by vibesafe v1.0.0 — Open source security scanner for AI-generated projects', lm, y);
+
+  // Save
+  const repoName = lastUrl.split('/').pop() || 'report';
+  doc.save(`vibesafe-${repoName}.pdf`);
+}
+</script>
+
+</body>
+</html>
